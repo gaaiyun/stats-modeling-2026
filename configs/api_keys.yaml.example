@@ -1,0 +1,28 @@
+# ============================================================
+# API Keys 配置（敏感，不入版本库）
+# ============================================================
+# 用法：cp api_keys.yaml.example api_keys.yaml，然后填入真实 key
+# api_keys.yaml 已被 .gitignore 排除
+# ============================================================
+
+# 硅基流动（SiliconFlow）—— LLM 多维打标用
+siliconflow:
+  api_key: "sk-your_siliconflow_key_here"
+  base_url: "https://api.siliconflow.cn/v1"
+  # 推荐模型（按性价比排序）：
+  #   Qwen/Qwen3-Coder-30B-A3B-Instruct  — 中文好，速度快，建议默认
+  #   Qwen/Qwen2.5-72B-Instruct          — 更强，更贵
+  #   deepseek-ai/DeepSeek-V3.2-Exp      — 深度推理
+  default_model: "Qwen/Qwen3-Coder-30B-A3B-Instruct"
+  # 重试 / 限流
+  max_retries: 3
+  retry_delay_sec: 2
+  rate_limit_qpm: 60     # 每分钟请求数限制（保守值，看你的套餐）
+
+# 国家统计局（暂不需要 key，用网页爬取或公开 CSV 下载）
+stats:
+  base_url: "https://data.stats.gov.cn"
+
+# 其他可选数据源
+ceads:  # 清华碳排放数据库
+  base_url: "https://www.ceads.net.cn"

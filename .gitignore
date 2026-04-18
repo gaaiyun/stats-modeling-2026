@@ -1,0 +1,39 @@
+# Cursor / IDE 用户配置（含 my-mcp 等本机绝对路径）
+.cursor/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Virtualenv
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# 敏感配置
+configs/api_keys.yaml
+configs/*.local.yaml
+.env
+
+# 数据（按需，原始数据可能太大）
+data/raw/*.zip
+data/raw/*.tar.gz
+data/interim/llm_cache/
+
+# 输出
+logs/
+figures/*.html
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时
+*.tmp
+*~
