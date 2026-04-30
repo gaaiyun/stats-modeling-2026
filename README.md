@@ -42,7 +42,7 @@
 ## 三、目录结构
 
 ```
-g:\统计建模\
+stats-modeling-2026/
 ├── data/
 │   ├── raw/                    # 原始爬取/下载数据
 │   │   ├── gov_reports/        # 31 省政府工作报告 txt

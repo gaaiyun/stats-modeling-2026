@@ -1,4 +1,5 @@
 """项目全局配置——勿提交带 key 的版本到公开仓库"""
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,7 +17,7 @@ for d in (RAW_DIR, INTERIM_DIR, PROCESSED_DIR, GOV_REPORT_DIR, STATS_DIR,
           FIGURES_DIR, PAPER_DIR, LOGS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-SILICONFLOW_API_KEY = "sk-REVOKED-LEAKED-IN-HISTORY"
+SILICONFLOW_API_KEY = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 LLM_MODEL = "Qwen/Qwen2.5-72B-Instruct"
 LLM_FALLBACK_MODELS = [
