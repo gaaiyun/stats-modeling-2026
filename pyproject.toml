@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nqp-policy-quant"
+version = "0.2.0"
+description = "基于 LLM 语义量化的省级新质生产力政策文本分析与耦合协调建模"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "statsmodels>=0.14",
+    "linearmodels>=6.0",
+    "matplotlib>=3.8",
+    "jieba>=0.42.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# LLM 打标（调用 OpenAI 兼容端点）
+llm = ["openai>=1.30", "requests>=2.31", "beautifulsoup4>=4.12", "lxml>=4.9"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+packages = ["nqp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

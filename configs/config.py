@@ -1,4 +1,10 @@
-"""项目全局配置——勿提交带 key 的版本到公开仓库"""
+"""项目全局路径与常量。
+
+API key 一律从环境变量或 ``configs/api_keys.yaml``（已 gitignore）读取，
+本文件不含任何密钥。
+"""
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -13,20 +19,10 @@ FIGURES_DIR = ROOT / "figures"
 PAPER_DIR = ROOT / "paper"
 LOGS_DIR = ROOT / "logs"
 
-for d in (RAW_DIR, INTERIM_DIR, PROCESSED_DIR, GOV_REPORT_DIR, STATS_DIR,
-          FIGURES_DIR, PAPER_DIR, LOGS_DIR):
-    d.mkdir(parents=True, exist_ok=True)
-
 SILICONFLOW_API_KEY = os.environ.get("SILICONFLOW_API_KEY", "")
-SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
-LLM_MODEL = "Qwen/Qwen2.5-72B-Instruct"
-LLM_FALLBACK_MODELS = [
-    "Qwen/Qwen2.5-32B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Pro/Qwen/Qwen2.5-7B-Instruct",
-]
+SILICONFLOW_BASE_URL = os.environ.get("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
 
+# 31 个省级行政区（不含港澳台），顺序按统计年鉴习惯
 PROVINCES = [
     "北京", "天津", "河北", "山西", "内蒙古",
     "辽宁", "吉林", "黑龙江",
@@ -36,19 +32,32 @@ PROVINCES = [
     "陕西", "甘肃", "青海", "宁夏", "新疆",
 ]
 
-YEARS = list(range(2014, 2026))
+YEARS = list(range(2014, 2026))  # 2014—2025
 
+# 新质生产力 5 维度。键名与 configs/labeling_schema.yaml、LLM 输出 CSV 完全一致，
+# 这是全项目维度键的唯一权威来源，下游代码请引用这里而不要另写一份。
 NQP_DIMENSIONS = {
-    "tech_innovation": "科技创新（基础研究/关键核心技术/原创性突破）",
-    "industry_upgrade": "产业升级（战略性新兴产业/未来产业/先进制造）",
-    "green_transform": "绿色低碳（双碳目标/清洁能源/生态文明）",
-    "digital_empower": "数字赋能（数字经济/人工智能/数字化转型）",
-    "talent_support": "人才支撑（创新人才/教育/职业培训）",
+    "tech_innovation": "科技创新",
+    "industrial_upgrade": "产业升级",
+    "green_low_carbon": "绿色低碳",
+    "digital_empowerment": "数字赋能",
+    "talent_support": "人才支撑",
 }
+NQP_DIMENSION_IDS = list(NQP_DIMENSIONS.keys())
 
-import matplotlib
 
-matplotlib.rcParams["font.sans-serif"] = [
-    "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans"
-]
-matplotlib.rcParams["axes.unicode_minus"] = False
+def configure_matplotlib_cjk() -> None:
+    """按需设置 matplotlib 中文字体。出图脚本显式调用，避免导入即触发副作用。"""
+    import matplotlib
+
+    matplotlib.rcParams["font.sans-serif"] = [
+        "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "DejaVu Sans",
+    ]
+    matplotlib.rcParams["axes.unicode_minus"] = False
+
+
+def ensure_dirs() -> None:
+    """创建数据 / 输出目录。脚本运行时调用，导入本模块时不产生副作用。"""
+    for d in (RAW_DIR, INTERIM_DIR, PROCESSED_DIR, GOV_REPORT_DIR, STATS_DIR,
+              FIGURES_DIR, PAPER_DIR, LOGS_DIR):
+        d.mkdir(parents=True, exist_ok=True)
