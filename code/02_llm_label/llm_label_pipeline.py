@@ -20,10 +20,10 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 try:
     import yaml
@@ -46,12 +46,43 @@ CONFIGS_DIR = PROJECT_ROOT / "configs"
 
 # ============ 配置加载 ============
 
+def _config_from_env() -> dict | None:
+    """从环境变量拼出和 api_keys.yaml 等价的配置。
+
+    支持两套变量名，任意一套齐全即可：
+      - LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+      - 或 OpenAI 兼容端点常用的 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
+    便于把密钥放在仓库外的 .env 里（见 README「凭证」一节），不写进任何文件。
+    """
+    for prefix in ("LLM", "OPENAI"):
+        key = os.environ.get(f"{prefix}_API_KEY")
+        if key:
+            return {
+                "siliconflow": {
+                    "api_key": key,
+                    "base_url": os.environ.get(f"{prefix}_BASE_URL",
+                                               "https://api.siliconflow.cn/v1"),
+                    "default_model": os.environ.get(f"{prefix}_MODEL",
+                                                    "Qwen/Qwen3-Coder-30B-A3B-Instruct"),
+                    "max_retries": int(os.environ.get("LLM_MAX_RETRIES", "3")),
+                    "retry_delay_sec": int(os.environ.get("LLM_RETRY_DELAY_SEC", "2")),
+                    "rate_limit_qpm": int(os.environ.get("LLM_RATE_LIMIT_QPM", "60")),
+                }
+            }
+    return None
+
+
 def load_api_config() -> dict:
+    """优先读环境变量，其次读 configs/api_keys.yaml。"""
+    env_cfg = _config_from_env()
+    if env_cfg is not None:
+        return env_cfg
     cfg_path = CONFIGS_DIR / "api_keys.yaml"
     if not cfg_path.exists():
-        print(f"[error] {cfg_path} 不存在。\n"
-              f"请先：cp {CONFIGS_DIR / 'api_keys.yaml.example'} {cfg_path}\n"
-              f"然后填入 SiliconFlow API key", file=sys.stderr)
+        print(f"[error] 未找到凭证。两种方式任选其一：\n"
+              f"  1) 设置环境变量 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL；\n"
+              f"  2) cp {CONFIGS_DIR / 'api_keys.yaml.example'} {cfg_path} 后填入 key。",
+              file=sys.stderr)
         sys.exit(2)
     if yaml is None:
         print("[error] PyYAML 未安装。pip install pyyaml", file=sys.stderr)
@@ -65,8 +96,13 @@ def load_labeling_schema() -> dict:
 
 # ============ Prompt 构造 ============
 
-def build_prompt(report_text: str, schema: dict, max_text_len: int = 6000) -> str:
-    """构造 LLM prompt。报告太长时截断（保留 head + tail）。"""
+def build_prompt(report_text: str, schema: dict, max_text_len: int = 6000,
+                 region: str | None = None) -> str:
+    """构造 LLM prompt。报告太长时截断（保留 head + tail）。
+
+    ``region`` 给出报告所属层级（如「中央」「北京」），写进开头让模型明确语境。
+    """
+    level = "中央" if region == "中央" else "省级"
     if len(report_text) > max_text_len:
         head = report_text[:max_text_len // 2]
         tail = report_text[-max_text_len // 2:]
@@ -78,7 +114,7 @@ def build_prompt(report_text: str, schema: dict, max_text_len: int = 6000) -> st
         dims_text.append(f"- **{d['name']}（{d['id']}）**：{d['description'].strip()}\n  参考关键词：{kw}")
     dims_block = "\n\n".join(dims_text)
 
-    return f"""你是一名经济学者，需要对一份省级政府工作报告做新质生产力相关的语义评分。
+    return f"""你是一名经济学者，需要对一份{level}政府工作报告做新质生产力相关的语义评分。
 
 # 评分维度（5 个，每个 1-10 分）
 
@@ -159,26 +195,29 @@ def llm_call(client: 'OpenAI', model: str, prompt: str,
 
 def discover_reports(province_filter: str | None = None,
                      year_filter: int | None = None) -> list[tuple[str, int, Path]]:
-    """扫描 data/raw/gov_reports/，返回 [(province, year, path)]"""
+    """递归扫描 data/raw/gov_reports/（含 central/ 等子目录），返回 [(region, year, path)]。
+
+    文件名约定：``{地区}_{年份}.txt``，如 ``北京_2024.txt``、``中央_2024.txt``。
+    """
     if not RAW_REPORTS_DIR.exists():
         print(f"[warn] {RAW_REPORTS_DIR} 不存在。先跑 fetch_gov_reports.py", file=sys.stderr)
         return []
     items = []
-    for p in sorted(RAW_REPORTS_DIR.glob("*.txt")):
-        # 文件名约定：{province}_{year}.txt，如 北京_2024.txt
+    for p in sorted(RAW_REPORTS_DIR.rglob("*.txt")):
+        # 文件名约定：{地区}_{年份}.txt
         parts = p.stem.split("_")
         if len(parts) != 2:
             continue
-        province, year_str = parts
+        region, year_str = parts
         try:
             year = int(year_str)
         except ValueError:
             continue
-        if province_filter and province != province_filter:
+        if province_filter and region != province_filter:
             continue
         if year_filter and year != year_filter:
             continue
-        items.append((province, year, p))
+        items.append((region, year, p))
     return items
 
 
@@ -192,29 +231,22 @@ def main() -> int:
     parser.add_argument('--model', default=None, help='覆盖配置里的默认 model')
     args = parser.parse_args()
 
-    cfg = load_api_config()
+    # Windows 控制台默认 GBK，中文 + emoji 重定向时会乱码/报错，统一改 UTF-8。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
+
     schema = load_labeling_schema()
-
-    sf = cfg['siliconflow']
-    model = args.model or sf['default_model']
-    api_key = sf['api_key']
-
-    if api_key.startswith("sk-your_") or not api_key:
-        print(f"[error] 请先在 {CONFIGS_DIR/'api_keys.yaml'} 里填入真实 SiliconFlow key", file=sys.stderr)
-        return 2
-
-    INTERIM_DIR.mkdir(parents=True, exist_ok=True)
-    LLM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    out_path = Path(args.output) if args.output else INTERIM_DIR / 'llm_labels.csv'
 
     items = discover_reports(args.province, args.year)
     if args.limit:
         items = items[:args.limit]
 
+    # dry-run 与无数据演示都不需要凭证，先处理掉
     if not items:
         print("[info] 没有找到报告。先跑 fetch_gov_reports.py 准备数据。", file=sys.stderr)
-        # demo 模式：用一段假文本演示 prompt
         demo_text = "去年我省深入实施创新驱动发展战略，加强关键核心技术攻关，推进战略性新兴产业培育，新能源汽车产量增长 40%。新型基础设施建设取得突破，5G 基站新增 1.2 万个。深入推进碳达峰行动..."
         prompt = build_prompt(demo_text, schema)
         print("=" * 70)
@@ -224,12 +256,11 @@ def main() -> int:
         return 0
 
     if args.dry_run:
-        # 只打印第一个的 prompt
-        province, year, p = items[0]
+        region, year, p = items[0]
         text = p.read_text(encoding='utf-8')
-        prompt = build_prompt(text, schema)
+        prompt = build_prompt(text, schema, region=region)
         print(f"[dry-run] 会处理 {len(items)} 个文件")
-        print(f"[dry-run] 第一个：{province} {year} ({len(text)} 字符)")
+        print(f"[dry-run] 第一个：{region} {year} ({len(text)} 字符)")
         print(f"[dry-run] Prompt 长度 ~{len(prompt)} 字符")
         print()
         print("=" * 70)
@@ -238,9 +269,23 @@ def main() -> int:
         print(prompt[:3000] + ("\n...[truncated]..." if len(prompt) > 3000 else ""))
         return 0
 
+    # 真正要调 API 了，到这里才需要凭证
+    cfg = load_api_config()
+    sf = cfg['siliconflow']
+    model = args.model or sf['default_model']
+    api_key = sf['api_key']
+    if not api_key or api_key.startswith("sk-your_"):
+        print("[error] 凭证为空或仍是占位符，请填入真实 API key（见 README 凭证一节）。",
+              file=sys.stderr)
+        return 2
+
     if OpenAI is None:
         print("[error] openai 未装。pip install openai", file=sys.stderr)
         return 2
+
+    INTERIM_DIR.mkdir(parents=True, exist_ok=True)
+    LLM_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = Path(args.output) if args.output else INTERIM_DIR / 'llm_labels.csv'
 
     client = OpenAI(api_key=api_key, base_url=sf['base_url'])
 
@@ -267,7 +312,7 @@ def main() -> int:
 
         for idx, (province, year, p) in enumerate(items, 1):
             text = p.read_text(encoding='utf-8')
-            prompt = build_prompt(text, schema)
+            prompt = build_prompt(text, schema, region=province)
             ck = cache_key(province, year, model, prompt)
             cache_path = LLM_CACHE_DIR / f"{ck}.json"
 

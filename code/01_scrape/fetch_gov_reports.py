@@ -55,7 +55,7 @@ def list_collected() -> None:
     if not RAW_REPORTS_DIR.exists():
         print(f"[info] {RAW_REPORTS_DIR} 不存在，还没开始收集")
         return
-    files = sorted(RAW_REPORTS_DIR.glob("*.txt"))
+    files = sorted(RAW_REPORTS_DIR.rglob("*.txt"))
     if not files:
         print("(没有任何报告)")
         return
@@ -146,6 +146,12 @@ def main() -> int:
     parser.add_argument("--province", help="抓取某省（仅支持 GOV_URLS 中已配置的）")
     parser.add_argument("--years", nargs="+", type=int, help="抓取的年份列表")
     args = parser.parse_args()
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError):
+            pass
 
     if args.list:
         list_collected()

@@ -7,6 +7,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
+build/
+dist/
 
 # Virtualenv
 .venv/
@@ -25,6 +28,9 @@ configs/*.local.yaml
 data/raw/*.zip
 data/raw/*.tar.gz
 data/interim/llm_cache/
+
+# 合成 / 可再生的演示输出（由 make_demo_panel.py 等脚本生成，不入库）
+data/processed/demo_*.csv
 
 # 输出
 logs/
